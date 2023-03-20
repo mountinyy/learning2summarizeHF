@@ -1,0 +1,14 @@
+common:
+  seed: 12345
+  batch_size: 8
+  learning_rate: 3e-5
+  num_train_epochs: 20
+  dataset_path: ./data/
+
+wandb:
+  project_name: YOUR_PROJECT_NAME
+  run_name: YOUR_RUN_NAME
+
+model:
+  save_path: ./saved_models
+  save_name: DETAIL_PATH_NAME # model path would be like saved_models/MODEL_NAME/save_name
