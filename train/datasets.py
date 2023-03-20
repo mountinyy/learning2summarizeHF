@@ -5,9 +5,15 @@ from torch.utils.data import Dataset
 
 class TLDRDataset(Dataset):
     def __init__(self, path: str, tokenizer, usage: str):
-        data_path = os.path.join(path, f"{usage}.jsonl")
+        data_path = (
+            os.path.join(path, "train.jsonl") if usage in ["train", "valid"] else os.path.join(path, "test.jsonl")
+        )
         with open(data_path, "r") as f:
             data = [eval(line.replace("null", "None")) for line in f.readlines()]
+        start = 0
+        end = int(len(data) * 0.8) if usage == "valid" else None
+        data = data[start:end]
+
         self.contexts = [
             tokenizer(item["post"], padding="max_length", truncation=True, max_length=1024) for item in data
         ]
