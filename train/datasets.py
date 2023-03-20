@@ -1,9 +1,12 @@
+import os
+
 from torch.utils.data import Dataset
 
 
 class TLDRDataset(Dataset):
     def __init__(self, path: str, tokenizer, usage: str):
-        with open(path, "r") as f:
+        data_path = os.path.join(path, f"{usage}.jsonl")
+        with open(data_path, "r") as f:
             data = [eval(line.replace("null", "None")) for line in f.readlines()]
         self.contexts = [
             tokenizer(item["post"], padding="max_length", truncation=True, max_length=1024) for item in data
