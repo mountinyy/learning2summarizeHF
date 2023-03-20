@@ -136,3 +136,4 @@ test.ipynb
 
 *.ipynb
 data/*
+wandb/*
