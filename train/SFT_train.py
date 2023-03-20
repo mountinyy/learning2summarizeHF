@@ -3,13 +3,14 @@ from typing import Tuple
 import os
 
 import torch
-import wandb
-from datasets import TLDRDataset
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import BartForConditionalGeneration, BartTokenizer
+
+import wandb
+from train.datasets import TLDRDataset
 
 
 def collate_fn(batch):

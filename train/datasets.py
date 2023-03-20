@@ -10,8 +10,8 @@ class TLDRDataset(Dataset):
         )
         with open(data_path, "r") as f:
             data = [eval(line.replace("null", "None")) for line in f.readlines()]
-        start = 0
-        end = int(len(data) * 0.8) if usage == "valid" else None
+        start = int(len(data) * 0.8) if usage == "valid" else None
+        end = int(len(data) * 0.8) if usage == "train" else None
         data = data[start:end]
 
         self.contexts = [

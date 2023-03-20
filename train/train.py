@@ -3,8 +3,9 @@ from typing import Tuple
 import os
 
 import torch
-import wandb
 from tqdm import tqdm
+
+import wandb
 
 
 def collate_fn(batch):

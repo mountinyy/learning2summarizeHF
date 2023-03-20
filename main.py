@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from train.train import train
+from train.SFT_train import train_model
 
 
 def get_args():
@@ -32,4 +32,4 @@ if __name__ == "__main__":
     args = get_args()
     conf = OmegaConf.load("./config.yaml")
     set_seed(conf.common.seed)
-    train(conf, args)
+    train_model(conf, args)
