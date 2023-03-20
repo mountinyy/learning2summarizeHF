@@ -13,8 +13,8 @@ def get_args():
     arg_parser.add_argument(
         "--model_name",
         required=True,
-        default="bert-base-cased",
-        choices=["bert-base-cased", "roberta-base", "cardiffnlp/twitter-roberta-base-sentiment-latest"],
+        default="facebook/bart-base",
+        choices=["facebook/bart-base"],
         help="pretrained model name form huggingface",
     )
 
