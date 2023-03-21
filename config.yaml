@@ -1,14 +1,16 @@
 common:
   seed: 12345
-  batch_size: 8
+  batch_size: 2
   learning_rate: 3e-5
   num_train_epochs: 20
   dataset_path: ./data/
+  data_limit: 5000
+  max_token_length: 1024
 
 wandb:
-  project_name: YOUR_PROJECT_NAME
-  run_name: YOUR_RUN_NAME
+  project_name: learning2sumHF
+  run_name: BART-cosine
 
 model:
   save_path: ./saved_models
-  save_name: DETAIL_PATH_NAME # model path would be like saved_models/MODEL_NAME/save_name
+  save_name: cosine # model path would be like saved_models/MODEL_NAME/save_name

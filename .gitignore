@@ -137,3 +137,5 @@ test.ipynb
 *.ipynb
 data/*
 wandb/*
+saved_models/*
+nohup.out

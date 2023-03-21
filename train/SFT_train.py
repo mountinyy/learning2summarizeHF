@@ -6,6 +6,7 @@ import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
+from torchmetrics.functional.text.rouge import rouge_score
 from tqdm import tqdm
 from transformers import BartForConditionalGeneration, BartTokenizer
 
@@ -23,8 +24,12 @@ def train_model(conf, args):
     tokenizer = BartTokenizer.from_pretrained(args.model_name)
 
     # dataset 설정
-    train_dataset = TLDRDataset(conf.common.dataset_path, tokenizer, "train")
-    valid_dataset = TLDRDataset(conf.common.dataset_path, tokenizer, "valid")
+    train_dataset = TLDRDataset(
+        conf.common.dataset_path, tokenizer, "train", conf.common.max_token_length, conf.common.data_limit
+    )
+    valid_dataset = TLDRDataset(
+        conf.common.dataset_path, tokenizer, "valid", conf.common.max_token_length, conf.common.data_limit
+    )
     # DataLoader 설정
     train_dataloader = DataLoader(
         train_dataset, batch_size=conf.common.batch_size, shuffle=False, collate_fn=collate_fn, drop_last=True
@@ -45,32 +50,37 @@ def train_model(conf, args):
     save_path = os.path.join(
         conf.model.save_path, args.model_name, conf.model.save_name, conf.wandb.run_name if conf.wandb.run_name else ""
     )
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
     # train/valid loop
-    best_acc = 0
+    best_rouge = 0
     for epoch in range(1, conf.common.num_train_epochs + 1):
         # Train
         total_loss = 0
-        total_correct = 0
+        rouge_sum = {
+            "rouge2_fmeasure": 0,
+            "rouge2_precision": 0,
+            "rouge2_recall": 0,
+        }
         model.to(device)
         model.train()
         for data in tqdm(train_dataloader, desc=f"train {epoch} epochs"):
-            contexts, labels = extract_data(data, tokenizer, device)
-            outputs, correct = run_model("train", model, contexts, labels)
-            total_correct += correct
+            contexts, attention_mask, labels = extract_data(data, tokenizer, device)
+            outputs, rouge = run_model("train", model, contexts, attention_mask, labels, tokenizer)
 
             optimizer.zero_grad()
             outputs["loss"].backward()
             optimizer.step()
             total_loss += outputs["loss"].detach().cpu()
+            for k in rouge.keys():
+                rouge_sum[k] += rouge[k]
 
         log_metric(
             "train",
             {
                 "total_loss": total_loss,
                 "len_dataloader": len(train_dataloader),
-                "total_correct": total_correct,
+                "rouge": rouge,
                 "len_dataset": len(train_dataset),
             },
         )
@@ -79,30 +89,36 @@ def train_model(conf, args):
         torch.cuda.empty_cache()
         model.eval()
         total_loss = 0
-        total_correct = 0
+        rouge_sum = {
+            "rouge2_fmeasure": 0,
+            "rouge2_precision": 0,
+            "rouge2_recall": 0,
+        }
         with torch.no_grad():
             for data in tqdm(valid_dataloader, desc=f"valid {epoch} epochs"):
-                contexts, labels = extract_data(data, tokenizer, device)
-                outputs, correct = run_model("valid", model, contexts, labels)
+                contexts, attention_mask, labels = extract_data(data, tokenizer, device)
+                outputs, rouge = run_model("valid", model, contexts, attention_mask, labels, tokenizer)
 
                 total_loss += outputs["loss"].detach().cpu()
+                for k in rouge.keys():
+                    rouge_sum[k] += rouge[k]
 
             log_metric(
                 "valid",
                 {
                     "total_loss": total_loss,
                     "len_dataloader": len(valid_dataloader),
-                    "total_correct": total_correct,
+                    "rouge": rouge,
                     "len_dataset": len(valid_dataset),
                 },
             )
             wandb.log({"learning_rate": optimizer.param_groups[0]["lr"]})
-            accuracy = total_correct / len(valid_dataset)
-
-            if accuracy > best_acc:
-                best_acc = accuracy
+            print(f'accuracy {rouge_sum["rouge2_fmeasure"]}, best_rouge {best_rouge}')
+            if rouge_sum["rouge2_fmeasure"] > best_rouge:
+                print("model saved")
+                best_rouge = rouge_sum["rouge2_fmeasure"]
                 model.save_pretrained(save_path)
-            scheduler.step(accuracy)
+            scheduler.step()
 
 
 def extract_data(data, tokenizer, device) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -111,22 +127,20 @@ def extract_data(data, tokenizer, device) -> Tuple[torch.Tensor, torch.Tensor]:
     For context data, tokenized context will be returned.
 
     Args:
-        data (dict): batch data with { 'context': (batch_size, context), 'label': (batch_size, label)}
+        data (dict): batch data with  { 'context': (batch_size, context), 'label': (batch_size, label)}
         tokenizer (transformers.Tokenizer): Tokenizer for tokenized context
         device : device which train is performed.
 
     Returns:
         Tuple (tokenized_context, labels): (bz, max_len) 크기의 tokenized_context와 labels 리턴
     """
-    contexts = [batch["context"] for batch in data]
+    contexts = torch.LongTensor([batch["context"]["input_ids"] for batch in data]).to(device)
+    attention_mask = torch.LongTensor([batch["context"]["attention_mask"] for batch in data]).to(device)
     labels = torch.LongTensor([batch["summary"] for batch in data]).to(device)
-    tokenized_contexts = tokenizer(
-        contexts, padding="max_length", truncation=True, max_length=512, return_tensors="pt"
-    ).to(device)
-    return (tokenized_contexts, labels)
+    return (contexts, attention_mask, labels)
 
 
-def run_model(run_type, model, contexts, labels):
+def run_model(run_type, model, contexts, attention_mask, labels, tokenizer):
     """Return model outputs and the correct counts compared to labels.
     Currently model should get labels as input, and outputs should include loss
 
@@ -140,25 +154,34 @@ def run_model(run_type, model, contexts, labels):
         tuple of (model outputs, correct_count)
     """
     assert run_type in ["train", "valid"], f"no valid run_type for {run_type}"
-    outputs = model(**contexts, labels=labels)
+    outputs = model(contexts, attention_mask=attention_mask, labels=labels)
     predicted = outputs["logits"].argmax(dim=-1)
-    correct = (predicted == labels).sum().datach().cpu().item()
+    rouge = calculate_rouge2(predicted, labels, tokenizer)
     wandb.log({f"{run_type}/loss": outputs["loss"]})
-    return (outputs, correct)
+    return (outputs, rouge)
 
 
-def log_metric(name, **kwargs):
+def log_metric(name, values):
     """logs metric to wandb.
     User can update for custom metrics.
 
     Args:
         name (str): name for log. Currently either "train" or "valid"
     """
-    mean_loss = kwargs["total_loss"] / kwargs["len_dataloader"]
-    accuracy = kwargs["total_correct"] / kwargs["len_dataset"]
+    mean_loss = values["total_loss"] / values["len_dataloader"]
+
     wandb.log(
         {
             f"{name}/mean_loss": mean_loss,
-            f"{name}/accuracy": accuracy,
+            f"{name}/rouge2_f1": values["rouge"]["rouge2_fmeasure"] / values["len_dataset"],
+            f"{name}/rouge2_preciison": values["rouge"]["rouge2_precision"] / values["len_dataset"],
+            f"{name}/rouge2_recall": values["rouge"]["rouge2_recall"] / values["len_dataset"],
         }
     )
+
+
+def calculate_rouge2(predicted, labels, tokenizer):
+    d_pred = tokenizer.batch_decode(predicted)
+    d_label = tokenizer.batch_decode(labels)
+    rouge = rouge_score(d_pred, d_label, rouge_keys="rouge2")
+    return rouge
