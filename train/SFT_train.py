@@ -50,7 +50,7 @@ def train_model(conf, args):
     save_path = os.path.join(
         conf.model.save_path, args.model_name, conf.model.save_name, conf.wandb.run_name if conf.wandb.run_name else ""
     )
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
     # train/valid loop
     best_rouge = 0

@@ -2,7 +2,7 @@ common:
   seed: 12345
   batch_size: 2
   learning_rate: 3e-5
-  num_train_epochs: 5
+  num_train_epochs: 20
   dataset_path: ./data/
   data_limit: 5000
   max_token_length: 1024
