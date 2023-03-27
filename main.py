@@ -5,10 +5,10 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from train.SFT_train import train_model
-from train.actor import train_actor
+# from train.SFT_train import train_model
+# from train.actor import train_actor
 from train.datasets import AnthropicDataset
-    
+
 
 def get_args():
     arg_parser = argparse.ArgumentParser()
@@ -34,9 +34,9 @@ if __name__ == "__main__":
     args = get_args()
     conf = OmegaConf.load("./config.yaml")
     set_seed(conf.common.seed)
-    
+
     # Download Dataset
     download_dataset = AnthropicDataset(conf)
     download_dataset.save_dataset()
-    
-    train_actor(conf, args)
+
+    # train_actor(conf, args)
