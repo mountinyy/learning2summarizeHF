@@ -4,7 +4,7 @@ common:
   learning_rate: 3e-5
   num_train_epochs: 20
   dataset_path: ./data/
-  data_limit: 5000
+  data_limit: 5000 ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024
 
 wandb:
@@ -14,3 +14,9 @@ wandb:
 model:
   save_path: ./saved_models
   save_name: cosine # model path would be like saved_models/MODEL_NAME/save_name
+
+dataset:
+  save_path: ./data
+  sft_path: sft_data.json
+  rm_path: rm_data.json
+  rl_path: rl_data.json
