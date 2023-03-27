@@ -4,24 +4,19 @@ import random
 
 import numpy as np
 from datasets import load_dataset
-from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
 
-class SFTDataset(Dataset):
-    def __init__(self, path, tokenizer):
-        with open(path, "r") as f:
+class SFTDataset(IterableDataset):
+    def __init__(self, path):
+        self.path = path
+
+    def __iter__(self):
+        with open(self.path, "r") as f:
             data = json.load(f)
-        texts = [prompt + output for prompt, output in zip(data["prompts"], data["outputs"])]
-        data = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
-        self.input_ids = data["input_ids"]
-        self.attention_mask = data["attention_mask"]
-
-    def __len__(self):
-        return len(self.input_ids)
-
-    def __getitem__(self, idx):
-        return {"input_ids": self.input_ids[idx], "attention_mask": self.attention_mask[idx]}
+        for prompt, output in zip(data["prompts"], data["outputs"]):
+            yield prompt + output
 
 
 # Since Training lanugae models to follow instructions with human feedback used
