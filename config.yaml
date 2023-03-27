@@ -20,3 +20,10 @@ dataset:
   sft_path: sft_data.json
   rm_path: rm_data.json
   rl_path: rl_data.json
+
+sft:
+  model_name: gpt2
+  temperature: 0.5
+  max_seq_length: 1024
+  min_gen_length: 30
+  max_gen_length: 120
