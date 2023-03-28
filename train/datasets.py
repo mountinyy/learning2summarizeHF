@@ -8,6 +8,7 @@ from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
 
+# TODO 사실 reward model의 데이터로는 SFT model의 output을 사람이 직접 평가한 것을 써야 함
 class RewardDataset(IterableDataset):
     def __init__(self, path, limit, is_valid=False):
         super().__init__()
@@ -81,7 +82,11 @@ class AnthropicDataset:
         self.sft_path = os.path.join(conf.dataset.save_path, conf.dataset.sft_path)
         self.rm_path = os.path.join(conf.dataset.save_path, conf.dataset.rm_path)
         self.rl_path = os.path.join(conf.dataset.save_path, conf.dataset.rl_path)
-        self.dataset = load_dataset("Anthropic/hh-rlhf").shuffle()
+        self.do_sft = not os.path.exists(self.sft_path)
+        self.do_rm = not os.path.exists(self.rm_path)
+        self.do_rl = not os.path.exists(self.rl_path)
+        if self.do_sft or self.do_rm or self.do_rl:
+            self.dataset = load_dataset("Anthropic/hh-rlhf").shuffle()
 
     # TODO MAX SCORE 어떻게 할 지
     def _refine_dataset(self, chosen_data, rejected_data=None, label=None):
@@ -122,25 +127,29 @@ class AnthropicDataset:
             json.dump(data_dict, f)
 
     def save_dataset(self):
+        # Check if it has to save dataset
+        if not self.do_sft and not self.do_rm and not self.do_rl:
+            return
+
         total_len = len(self.dataset["train"])
         len_sft = int(total_len * 0.2)
         len_rm = int(total_len * 0.4)
         len_rl = int(total_len * 0.4)
 
         # SFT
-        if not os.path.exists(self.sft_path):
+        if self.do_sft:
             dataset = self.dataset["train"][:len_sft]["chosen"]
             self._save_json(self.sft_path, dataset, label="SFT")
         length = len_sft
 
         # RM
-        if not os.path.exists(self.rm_path):
+        if self.do_rm:
             dataset = self.dataset["train"][length : length + len_rm]["chosen"]
             rejected_dataset = self.dataset["train"][length : length + len_rm]["rejected"]
             self._save_json(self.rm_path, dataset, rejected_dataset, label="RM")
         length = length + len_rm
 
         # RL
-        if not os.path.exists(self.rl_path):
+        if self.do_rl:
             dataset = self.dataset["train"][length : length + len_rl]["chosen"]
             self._save_json(self.rl_path, dataset, label="RL")
