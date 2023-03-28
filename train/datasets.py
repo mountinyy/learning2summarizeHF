@@ -8,9 +8,43 @@ from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
 
+class RewardDataset(IterableDataset):
+    def __init__(self, path, limit, is_valid=False):
+        super().__init__()
+        self.path = path
+
+        # Fix limit when it is "None"
+        limit = None if limit == "None" else limit
+        with open(self.path, "r") as f:
+            tmp_data = json.load(f)["prompts"][:limit]
+        if limit is None:
+            limit = len(tmp_data)
+
+        if is_valid:
+            self.start = int(limit * 0.8)
+            self.limit = limit
+        else:
+            self.start = 0
+            self.limit = int(limit * 0.8)
+
+        self.len = len(tmp_data[self.start : self.limit])
+
+    def __iter__(self):
+        with open(self.path, "r") as f:
+            data = json.load(f)
+        for prompt, output, score in zip(
+            data["prompts"][self.start : self.limit],
+            data["outputs"][self.start : self.limit],
+            data["scores"][self.start : self.limit],
+        ):
+            yield (prompt + output, score)
+
+
 class SFTDataset(IterableDataset):
     def __init__(self, path, limit, is_valid=False):
+        super().__init__()
         self.path = path
+
         # Fix limit when it is "None"
         limit = None if limit == "None" else limit
         with open(self.path, "r") as f:

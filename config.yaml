@@ -31,3 +31,7 @@ sft:
   min_gen_length: 30
   max_gen_length: 120
   learning_rate: 3e-5
+
+reward:
+  model_name: roberta-base
+  hidden_dim: 1024
