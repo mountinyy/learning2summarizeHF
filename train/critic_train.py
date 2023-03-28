@@ -1,13 +1,13 @@
 import os
 
 import torch
+import wandb
 from torch.nn import MSELoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import wandb
 from train.datasets import RewardDataset
 from train.models import Critic
 

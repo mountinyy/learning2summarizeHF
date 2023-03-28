@@ -1,13 +1,13 @@
 import os
 
 import torch
+import wandb
 from torch.nn import CrossEntropyLoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import wandb
 from train.datasets import SFTDataset
 from train.models import Actor
 
@@ -22,9 +22,7 @@ def train_actor(conf):
     valid_dataset = SFTDataset(
         os.path.join(conf.dataset.save_path, conf.dataset.sft_path), conf.common.data_limit, is_valid=True
     )
-    import pdb
 
-    pdb.set_trace()
     # DataLoader 설정
     train_dataloader = DataLoader(train_dataset, batch_size=conf.common.batch_size, collate_fn=collate_fn)
     valid_dataloader = DataLoader(valid_dataset, batch_size=conf.common.batch_size, collate_fn=collate_fn)
