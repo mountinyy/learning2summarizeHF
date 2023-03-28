@@ -1,10 +1,10 @@
 common:
   seed: 12345
-  batch_size: 8
+  batch_size: 4
   learning_rate: 3e-5
-  num_train_epochs: 5
+  num_train_epochs: 15
   dataset_path: ./data/
-  data_limit: 100 ## MUST CHANGE FOR FULL TRAIN
+  data_limit: None ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024
   use_valid: True
   checkpoint_epoch: 5
@@ -12,11 +12,10 @@ common:
 wandb:
   use: False
   project_name: rlhf_dialogue
-  run_name: SFT-test
+  run_name: SFT-gpt2-medium
 
 model:
-  save_path: ./saved_models
-  save_name: cosine # model path would be like saved_models/MODEL_NAME/save_name
+  save_path: ./saved_models # model path would be like saved_models/MODEL_NAME/save_name
   checkpoint_name: None # ex) 5_checkpoint.pt or None
 
 dataset:
@@ -26,12 +25,15 @@ dataset:
   rl_path: rl_data.json
 
 sft:
-  model_name: gpt2
+  #model_name: EleutherAI/gpt-neo-1.3B
+  #model_name: gpt2-large
+  model_name: gpt2-medium
   temperature: 0.5
   max_seq_length: 1024
   min_gen_length: 30
   max_gen_length: 120
   learning_rate: 3e-5
+  gradient_accumulation: 4 # If don't want to use, set it 1.
 
 rm:
   model_name: roberta-base
