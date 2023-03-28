@@ -1,5 +1,5 @@
 from torch import nn
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 
 class Actor(nn.Module):
@@ -36,3 +36,33 @@ class Actor(nn.Module):
         actions = total_actions[:, states.shape[1] :]
 
         return (actions, total_actions)
+
+
+class Critic(nn.Module):
+    def __init__(self, conf, is_reward):
+        super().__init__()
+        self.conf = conf
+
+        self.model = AutoModel.from_pretrained(self.conf.reward.model_name)
+        model_hidden_dim = self.model.config.hidden_size
+        self.head_lm = nn.Sequential(
+            nn.Linear(model_hidden_dim, self.conf.reward.hidden_dim),
+            nn.GELU(),
+            nn.Linear(self.conf.reward.hidden_dim, 1),
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.conf.reward.model_name,
+            padding_side="left",
+            padding=True,
+            truncation=True,
+            model_max_length=self.conf.common.max_seq_length,
+        )
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+
+    def forward(self, input_ids, attention_mask):
+        output = self.model(input_ids, attention_mask=attention_mask)
+        reward = self.head_lm(output.last_hidden_state)
+
+        return reward
