@@ -9,18 +9,28 @@ from tqdm import tqdm
 
 
 class SFTDataset(IterableDataset):
-    def __init__(self, path, limit):
+    def __init__(self, path, limit, is_valid=False):
         self.path = path
-        self.limit = limit
-        if limit == "None":
-            limit = None
+        # Fix limit when it is "None"
+        limit = None if limit == "None" else limit
         with open(self.path, "r") as f:
-            self.len = len(json.load(f)["prompts"][:limit])
+            tmp_data = json.load(f)["prompts"][:limit]
+        if limit is None:
+            limit = len(tmp_data)
+
+        if is_valid:
+            self.start = int(limit * 0.8)
+            self.limit = limit
+        else:
+            self.start = 0
+            self.limit = int(limit * 0.8)
+
+        self.len = len(tmp_data[self.start : self.limit])
 
     def __iter__(self):
         with open(self.path, "r") as f:
             data = json.load(f)
-        for prompt, output in zip(data["prompts"][: self.limit], data["outputs"][: self.limit]):
+        for prompt, output in zip(data["prompts"][self.start : self.limit], data["outputs"][self.start : self.limit]):
             yield prompt + output
 
 

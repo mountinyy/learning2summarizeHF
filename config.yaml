@@ -2,10 +2,12 @@ common:
   seed: 12345
   batch_size: 8
   learning_rate: 3e-5
-  num_train_epochs: 5
+  num_train_epochs: 10
   dataset_path: ./data/
   data_limit: 100 ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024
+  use_valid: True
+  checkpoint_epoch: 5
 
 wandb:
   project_name: rlhf_dialogue
@@ -14,6 +16,7 @@ wandb:
 model:
   save_path: ./saved_models
   save_name: cosine # model path would be like saved_models/MODEL_NAME/save_name
+  checkpoint_name: None # ex) 5_checkpoint.pt or None
 
 dataset:
   save_path: ./data
