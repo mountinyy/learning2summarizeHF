@@ -1,16 +1,33 @@
 common:
   seed: 12345
-  batch_size: 2
+  batch_size: 8
   learning_rate: 3e-5
-  num_train_epochs: 20
+  num_train_epochs: 10
   dataset_path: ./data/
-  data_limit: 5000
+  data_limit: 100 ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024
+  use_valid: True
+  checkpoint_epoch: 5
 
 wandb:
-  project_name: learning2sumHF
-  run_name: BART-cosine
+  project_name: rlhf_dialogue
+  run_name: SFT-test
 
 model:
   save_path: ./saved_models
   save_name: cosine # model path would be like saved_models/MODEL_NAME/save_name
+  checkpoint_name: None # ex) 5_checkpoint.pt or None
+
+dataset:
+  save_path: ./data
+  sft_path: sft_data.json
+  rm_path: rm_data.json
+  rl_path: rl_data.json
+
+sft:
+  model_name: gpt2
+  temperature: 0.5
+  max_seq_length: 1024
+  min_gen_length: 30
+  max_gen_length: 120
+  learning_rate: 3e-5
