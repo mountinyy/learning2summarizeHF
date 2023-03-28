@@ -7,10 +7,15 @@ class Actor(nn.Module):
         super().__init__()
         self.conf = conf
         self.model = AutoModelForCausalLM.from_pretrained(self.conf.sft.model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.conf.sft.model_name, padding_side="left")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.conf.sft.model_name, padding_side="left", max_model_lengt=conf.sft.max_seq_length
+        )
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
     def forward(self, states, states_mask):
-        model_output = self.model.forward(states, attention_mask=states_mask, return_dict=True)
+        model_output = self.model(states, attention_mask=states_mask, return_dict=True)
         total_action_probs = model_output.logits
         return total_action_probs
 

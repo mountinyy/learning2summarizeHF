@@ -3,71 +3,92 @@ from typing import Tuple
 import os
 
 import torch
-import wandb
+from torch.nn import CrossEntropyLoss
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+import wandb
+from train.datasets import SFTDataset
+from train.models import Actor
 
 
 def collate_fn(batch):
     return batch
 
 
-def train_model(conf, args):
+def train_actor(conf):
     # dataset 설정
-    train_dataset = None
-    valid_dataset = None
+    train_dataset = SFTDataset(os.path.join(conf.dataset.save_path, conf.dataset.sft_path), conf.common.data_limit)
     # DataLoader 설정
-    train_dataloader = None
-    valid_dataloader = None
+    train_dataloader = DataLoader(train_dataset, batch_size=conf.common.batch_size, collate_fn=collate_fn)
 
     # wandb 설정
     wandb.login()
     if conf.wandb.run_name:
-        wandb.init(project=conf.wandb.project_name, name=args.model_name + "-" + conf.wandb.run_name)
+        wandb.init(project=conf.wandb.project_name, name=conf.sft.model_name + "-" + conf.wandb.run_name)
     else:
-        wandb.init(project=conf.wandb.project_name, name=args.model_name)
+        wandb.init(project=conf.wandb.project_name, name=conf.sft.model_name)
 
     # Model 설정 (model, tokenizer, (config))
-    model = None
-    tokenizer = None
+    model = Actor(conf)
 
     # Train Parameter 설정
-    optimizer = None
-    scheduler = None
+    optimizer = AdamW(model.parameters(), lr=conf.sft.learning_rate, weight_decay=1e-5)
+    scheduler = CosineAnnealingWarmRestarts(
+        optimizer, T_0=train_dataset.len // conf.common.batch_size, T_mult=1, eta_min=conf.sft.learning_rate * 0.01
+    )
+    loss_fn = CrossEntropyLoss()
     # scheduler = CosineAnnealingLR(optimizer, T_max=50, eta_min=5e-7)
     save_path = os.path.join(
-        conf.model.save_path, args.model_name, conf.model.save_name, conf.wandb.run_name if conf.wandb.run_name else ""
+        conf.model.save_path,
+        conf.sft.model_name,
+        conf.model.save_name,
+        conf.wandb.run_name if conf.wandb.run_name else "",
     )
+    save_path
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # train/valid loop
-    best_acc = 0
     for epoch in range(1, conf.common.num_train_epochs + 1):
         # Train
         total_loss = 0
-        total_correct = 0
         model.to(device)
         model.train()
-        for data in tqdm(train_dataloader, desc=f"train {epoch} epochs"):
-            contexts, labels = extract_data(data, tokenizer, device)
-            outputs, correct = run_model("train", model, contexts, labels)
-            total_correct += correct
-
-            optimizer.zero_grad()
-            outputs["loss"].backward()
-            optimizer.step()
-            total_loss += outputs["loss"].detach().cpu()
-
-        log_metric(
-            "train",
-            {
-                "total_loss": total_loss,
-                "len_dataloader": len(train_dataloader),
-                "total_correct": total_correct,
-                "len_dataset": len(train_dataset),
-            },
+        pbar = tqdm(
+            enumerate(train_dataloader),
+            total=int(train_dataset.len / conf.common.batch_size),
+            desc=f"train {epoch} epochs",
         )
+        for i, data in pbar:
+            tokenized_data = model.tokenizer(data, padding=True, truncation=True, return_tensors="pt")
+            states = tokenized_data["input_ids"]
+            states_mask = tokenized_data["attention_mask"]
+
+            input_states = states[:, :-1].to(device)
+            input_states_mask = states_mask[:, :-1].to(device)
+            output_states = states[:, 1:].to(device)
+
+            total_action_probs = model(input_states, input_states_mask)
+            loss = loss_fn(
+                total_action_probs.view(output_states.size(0) * output_states.size(1), -1), output_states.view(-1)
+            )
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+
+            loss_value = loss.item()
+            total_loss += loss_value
+            wandb.log({"train/loss": loss_value})
+            pbar.set_postfix_str(f"loss {loss_value}")
+
+        mean_loss = total_loss / (train_dataset.len / conf.common.batch_size)
+        wandb.log({"train/mean_loss": mean_loss})
 
         # Valid
+        """
         torch.cuda.empty_cache()
         model.eval()
         total_loss = 0
@@ -95,6 +116,7 @@ def train_model(conf, args):
                 best_acc = accuracy
                 model.save_pretrained(save_path)
             scheduler.step(accuracy)
+        """
 
 
 def extract_data(data, tokenizer, device) -> Tuple[torch.Tensor, torch.Tensor]:
