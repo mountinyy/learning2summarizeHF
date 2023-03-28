@@ -43,26 +43,28 @@ class Critic(nn.Module):
         super().__init__()
         self.conf = conf
 
-        self.model = AutoModel.from_pretrained(self.conf.reward.model_name)
+        self.model = AutoModel.from_pretrained(self.conf.rm.model_name)
         model_hidden_dim = self.model.config.hidden_size
         self.head_lm = nn.Sequential(
-            nn.Linear(model_hidden_dim, self.conf.reward.hidden_dim),
+            nn.Linear(model_hidden_dim, self.conf.rm.hidden_dim),
             nn.GELU(),
-            nn.Linear(self.conf.reward.hidden_dim, 1),
+            nn.Linear(self.conf.rm.hidden_dim, 1),
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.conf.reward.model_name,
+            self.conf.rm.model_name,
             padding_side="left",
             padding=True,
             truncation=True,
-            model_max_length=self.conf.common.max_seq_length,
+            model_max_length=self.conf.common.max_token_length,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
+    # TODO Reward Model을 어떻게 구성해야 모델이 dialogue에 대한 응답의 적절성에 집중할 수 있을까?
     def forward(self, input_ids, attention_mask):
         output = self.model(input_ids, attention_mask=attention_mask)
         reward = self.head_lm(output.last_hidden_state)
+        reward = reward.view(reward.size(0), -1)[:, -1]
 
         return reward

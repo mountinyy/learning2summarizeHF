@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from train.actor_train import train_actor
+# from train.actor_train import train_actor
+from train.critic_train import train_reward
 
-# from train.SFT_train import train_model
 # from train.actor import train_actor
 from train.datasets import AnthropicDataset
 
@@ -41,5 +41,7 @@ if __name__ == "__main__":
     download_dataset = AnthropicDataset(conf)
     download_dataset.save_dataset()
 
-    # train_actor(conf, args)
-    train_actor(conf)
+    # SFT
+    # train_actor(conf)
+    # RM
+    train_reward(conf)
