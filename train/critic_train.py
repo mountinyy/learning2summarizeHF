@@ -1,13 +1,13 @@
 import os
 
 import torch
-import wandb
 from torch.nn import MSELoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import wandb
 from train.datasets import RewardDataset
 from train.models import Critic
 
@@ -41,9 +41,9 @@ def train_reward(conf):
     model = Critic(conf, is_reward=True)
 
     # Train Parameter 설정
-    optimizer = AdamW(model.parameters(), lr=conf.sft.learning_rate, weight_decay=1e-5)
+    optimizer = AdamW(model.parameters(), lr=conf.rm.learning_rate, weight_decay=1e-5)
     scheduler = CosineAnnealingWarmRestarts(
-        optimizer, T_0=train_dataset.len // conf.common.batch_size, T_mult=1, eta_min=conf.sft.learning_rate * 0.01
+        optimizer, T_0=train_dataset.len // conf.common.batch_size, T_mult=1, eta_min=conf.rm.learning_rate * 0.01
     )
     loss_fn = MSELoss()
     # scheduler = CosineAnnealingLR(optimizer, T_max=50, eta_min=5e-7)
@@ -88,6 +88,7 @@ def train_reward(conf):
             total=int(train_dataset.len / conf.common.batch_size),
             desc=f"train {epoch} epochs",
         )
+        model.zero_grad()
         for i, (data, score) in pbar:
             tokenized_data = model.tokenizer(data, padding=True, truncation=True, return_tensors="pt")
             actions = tokenized_data["input_ids"].to(device)
@@ -96,17 +97,17 @@ def train_reward(conf):
 
             rewards = model(actions, actions_mask)
             loss = loss_fn(score, rewards)
-
-            optimizer.zero_grad()
+            loss = loss / conf.rm.gradient_accumulation
             loss.backward()
-            optimizer.step()
-            scheduler.step()
-
             loss_value = loss.item()
             total_loss += loss_value
             if conf.wandb.use:
                 wandb.log({"train/loss": loss_value})
             pbar.set_postfix_str(f"loss {loss_value}")
+            if (i + 1) % conf.rm.gradient_accumulation == 0:
+                optimizer.step()
+                scheduler.step()
+                model.zero_grad()
 
         mean_loss = total_loss / (train_dataset.len / conf.common.batch_size)
         if conf.wandb.use:

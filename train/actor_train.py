@@ -1,13 +1,13 @@
 import os
 
 import torch
-import wandb
 from torch.nn import CrossEntropyLoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import wandb
 from train.datasets import SFTDataset
 from train.models import Actor
 
@@ -112,7 +112,6 @@ def train_actor(conf):
                 optimizer.step()
                 scheduler.step()
                 model.zero_grad()
-                optimizer.zero_grad()
 
         run_validation(conf, model, valid_dataset, valid_dataloader, loss_fn, epoch, device)
 

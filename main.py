@@ -39,14 +39,23 @@ if __name__ == "__main__":
     download_dataset.save_dataset()
 
     if args.run == "sft":
-        print("=" * 50 + "\nTraining SFT\n" + "=" * 50)
+        print("=" * 50)
+        print("Training SFT".center(50))
+        print("=" * 50)
         train_actor(conf)
     elif args.run == "rm":
-        print("=" * 50 + "\nTraining RM\n" + "=" * 50)
+        print("=" * 50)
+        print("Training RM".center(50))
+        print("=" * 50)
+        # print("=" * 50 + "\nTraining RM\n".center(50) + "=" * 50)
         train_reward(conf)
     elif args.run == "rl":
-        print("=" * 50 + "\nTraining RL\n" + "=" * 50)
+        print("=" * 50)
+        print("Training RL".center(50))
+        print("=" * 50)
         pass
     elif args.run == "all":
-        print("=" * 50 + "\nTraining ALL\n" + "=" * 50)
+        print("=" * 50)
+        print("Training ALL".center(50))
+        print("=" * 50)
         pass
