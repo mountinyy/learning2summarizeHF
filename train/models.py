@@ -61,6 +61,8 @@ class Critic(nn.Module):
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
+        # model parameter freeze
+
     # TODO Reward Model을 어떻게 구성해야 모델이 dialogue에 대한 응답의 적절성에 집중할 수 있을까?
     def forward(self, input_ids, attention_mask):
         output = self.model(input_ids, attention_mask=attention_mask)

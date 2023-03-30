@@ -1,8 +1,8 @@
 common:
   seed: 12345
-  batch_size: 16
+  batch_size: 8
   learning_rate: 3e-5
-  num_train_epochs: 10
+  num_train_epochs: 15
   dataset_path: ./data/
   data_limit: None ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024

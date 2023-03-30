@@ -1,7 +1,7 @@
 import os
 
 import torch
-from torch.nn import MSELoss
+from torch.nn.functional import logsigmoid
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
@@ -12,18 +12,25 @@ from train.datasets import RewardDataset
 from train.models import Critic
 
 
+# TODO RM 모델 훈련에 score가 필요없다고 판단되면 REwardDataset에서 score 뱉는거 지우기
 def collate_fn(batch):
-    text = [item[0] for item in batch]
-    score = [float(item[1]) for item in batch]
-    score = torch.FloatTensor(score)
-    return (text, score)
+    win_data = []
+    lost_data = []
+    win_data.append([item[0][0] + item[1][0] for item in batch])
+    # win_data.append([item[1][0] for item in batch])
+    win_data.append([item[2][0] for item in batch])
+    lost_data.append([item[0][1] + item[1][1] for item in batch])
+    # lost_data.append([item[1][1] for item in batch])
+    lost_data.append([item[2][1] for item in batch])
+
+    return (win_data, lost_data)
 
 
 def train_reward(conf):
     # dataset 설정
-    train_dataset = RewardDataset(os.path.join(conf.dataset.save_path, conf.dataset.rl_path), conf.common.data_limit)
+    train_dataset = RewardDataset(os.path.join(conf.dataset.save_path, conf.dataset.rm_path), conf.common.data_limit)
     valid_dataset = RewardDataset(
-        os.path.join(conf.dataset.save_path, conf.dataset.rl_path), conf.common.data_limit, is_valid=True
+        os.path.join(conf.dataset.save_path, conf.dataset.rm_path), conf.common.data_limit, is_valid=True
     )
     # DataLoader 설정
     train_dataloader = DataLoader(train_dataset, batch_size=conf.common.batch_size, collate_fn=collate_fn)
@@ -43,10 +50,12 @@ def train_reward(conf):
     # Train Parameter 설정
     optimizer = AdamW(model.parameters(), lr=conf.rm.learning_rate, weight_decay=1e-5)
     scheduler = CosineAnnealingWarmRestarts(
-        optimizer, T_0=train_dataset.len // conf.common.batch_size, T_mult=1, eta_min=conf.rm.learning_rate * 0.01
+        optimizer,
+        T_0=train_dataset.len // conf.common.batch_size if train_dataset.len // conf.common.batch_size > 0 else 1,
+        T_mult=1,
+        eta_min=conf.rm.learning_rate * 0.01,
     )
-    loss_fn = MSELoss()
-    # scheduler = CosineAnnealingLR(optimizer, T_max=50, eta_min=5e-7)
+    # loss_fn = MSELoss()
 
     # model & checkpoint path
     save_path = os.path.join(
@@ -89,14 +98,23 @@ def train_reward(conf):
             desc=f"train {epoch} epochs",
         )
         model.zero_grad()
-        for i, (data, score) in pbar:
-            tokenized_data = model.tokenizer(data, padding=True, truncation=True, return_tensors="pt")
-            actions = tokenized_data["input_ids"].to(device)
-            actions_mask = tokenized_data["attention_mask"].to(device)
-            score = score.to(device)
+        # win_data : (datatype, batch, item)
+        for i, (win_data, lost_data) in pbar:
+            win_rewards, lost_rewards = [], []
+            # calculate win_rewards
+            tokenized_prompts = model.tokenizer(win_data[0], padding=True, truncation=True, return_tensors="pt")
+            actions = tokenized_prompts["input_ids"].to(device)
+            actions_mask = tokenized_prompts["attention_mask"].to(device)
+            win_rewards = model(actions, actions_mask)
 
-            rewards = model(actions, actions_mask)
-            loss = loss_fn(score, rewards)
+            tokenized_prompts = model.tokenizer(lost_data[0], padding=True, truncation=True, return_tensors="pt")
+            actions = tokenized_prompts["input_ids"].to(device)
+            actions_mask = tokenized_prompts["attention_mask"].to(device)
+            lost_rewards = model(actions, actions_mask)
+
+            # compute loss
+            loss = -1 * logsigmoid(win_rewards - lost_rewards).mean()
+
             loss = loss / conf.rm.gradient_accumulation
             loss.backward()
             loss_value = loss.item()
@@ -110,6 +128,7 @@ def train_reward(conf):
                 model.zero_grad()
 
         mean_loss = total_loss / (train_dataset.len / conf.common.batch_size)
+        print(f"mean_loss : {mean_loss}")
         if conf.wandb.use:
             wandb.log({"train/mean_loss": mean_loss})
 
@@ -123,15 +142,29 @@ def train_reward(conf):
         )
         total_loss = 0
         with torch.no_grad():
-            for i, (data, score) in pbar:
-                tokenized_data = model.tokenizer(data, padding=True, truncation=True, return_tensors="pt")
-                actions = tokenized_data["input_ids"].to(device)
-                actions_mask = tokenized_data["attention_mask"].to(device)
-                score = score.to(device)
+            for i, (win_data, lost_data) in pbar:
+                win_rewards, lost_rewards = [], []
 
-                rewards = model(actions, actions_mask)
-                loss = loss_fn(score, rewards)
+                # calculate win_rewards
+                for prompts, scores in zip(win_data[0], win_data[1]):
+                    tokenized_prompts = model.tokenizer(prompts, padding=True, truncation=True, return_tensors="pt")
+                    actions = tokenized_prompts["input_ids"].to(device)
+                    actions_mask = tokenized_prompts["attention_mask"].to(device)
+                    reward = model(actions, actions_mask)
+                    win_rewards.append(reward)
+                win_rewards = torch.Tensor(win_rewards)
 
+                # calculate lost_rewards
+                for prompts, scores in zip(lost_data[0], lost_data[1]):
+                    tokenized_prompts = model.tokenizer(prompts, padding=True, truncation=True, return_tensors="pt")
+                    actions = tokenized_prompts["input_ids"].to(device)
+                    actions_mask = tokenized_prompts["attention_mask"].to(device)
+                    reward = model(actions, actions_mask)
+                    lost_rewards.append(reward)
+                lost_rewards = torch.Tensor(lost_rewards)
+
+                # compute loss
+                loss = binary_loss(win_rewards, lost_rewards)
                 loss_value = loss.item()
                 total_loss += loss_value
                 if conf.wandb.use:
@@ -163,3 +196,17 @@ def load_checkpoint(model, optimizer, checkpoint_path, name, device):
                 state[k] = v.to(device)
 
     return model, optimizer, epoch
+
+
+def binary_loss(win, lost):
+    loss = -logsigmoid(win - lost).mean()
+    return loss
+
+
+class LogSigmoidLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, win, lost):
+        loss = -logsigmoid(win * lost).mean()
+        return loss

@@ -21,24 +21,36 @@ class RewardDataset(IterableDataset):
         if limit is None:
             limit = len(tmp_data)
 
+        # make boundary for train/valid set to even
+        boundary = int(limit * 0.8)
+        boundary = boundary if boundary % 2 == 0 else boundary - 1
         if is_valid:
-            self.start = int(limit * 0.8)
+            self.start = boundary
             self.limit = limit
         else:
             self.start = 0
-            self.limit = int(limit * 0.8)
+            self.limit = boundary
 
-        self.len = len(tmp_data[self.start : self.limit])
+        self.len = int(len(tmp_data[self.start : self.limit]) / 2)
 
     def __iter__(self):
         with open(self.path, "r") as f:
             data = json.load(f)
+        """
         for prompt, output, score in zip(
             data["prompts"][self.start : self.limit],
             data["outputs"][self.start : self.limit],
             data["scores"][self.start : self.limit],
         ):
             yield (prompt + output, score)
+        """
+        for i in range(self.start, self.limit, 2):
+            if i == self.limit - 1:
+                continue
+            prompt = [data["prompts"][i], data["prompts"][i + 1]]
+            output = [data["outputs"][i], data["outputs"][i + 1]]
+            scores = [data["scores"][i], data["scores"][i + 1]]
+            yield [prompt, output, scores]
 
 
 class SFTDataset(IterableDataset):
@@ -53,12 +65,15 @@ class SFTDataset(IterableDataset):
         if limit is None:
             limit = len(tmp_data)
 
+        # make boundary for train/valid set to even
+        boundary = int(limit * 0.8)
+        boundary = boundary if boundary % 2 == 0 else boundary - 1
         if is_valid:
-            self.start = int(limit * 0.8)
+            self.start = boundary
             self.limit = limit
         else:
             self.start = 0
-            self.limit = int(limit * 0.8)
+            self.limit = boundary
 
         self.len = len(tmp_data[self.start : self.limit])
 
@@ -90,22 +105,47 @@ class AnthropicDataset:
 
     # TODO MAX SCORE 어떻게 할 지
     def _refine_dataset(self, chosen_data, rejected_data=None, label=None):
-        dataset = self._extract_data(chosen_data, label, score=5)
         if rejected_data:
-            rejected_dataset = self._extract_data(rejected_data, label, score=0)
-            dataset = [chosen + rejected for chosen, rejected in zip(dataset, rejected_dataset)]
+            dataset = self._extract_with_rejected_data(chosen_data, rejected_data, label, score=1)
+            return {
+                "prompts": dataset[0],
+                "outputs": dataset[1],
+                "scores": dataset[2],
+            }
+        else:
+            dataset = self._extract_data(chosen_data, label, score=1)
+            # Shuffle
+            dataset = np.array(dataset)
+            random_idx = list(range(len(dataset[0])))
+            random.shuffle(random_idx)
+            return {
+                "prompts": dataset[0][random_idx].tolist(),
+                "outputs": dataset[1][random_idx].tolist(),
+                "scores": dataset[2][random_idx].tolist(),
+            }
 
-        # Shuffle
-        dataset = np.array(dataset)
-        random_idx = list(range(len(dataset[0])))
-        random.shuffle(random_idx)
-        return {
-            "prompts": dataset[0][random_idx].tolist(),
-            "outputs": dataset[1][random_idx].tolist(),
-            "scores": dataset[2][random_idx].tolist(),
-        }
+    def _extract_with_rejected_data(self, chosen_data, rejected_dat, label=None, score=1):
+        prefix = "\n\nAssistant: "
+        chosen_chunk_list = [item.split("Assistant:") for item in chosen_data]
+        rejected_chunk_list = [item.split("Assistant:") for item in rejected_dat]
+        prompts, outputs, scores = [], [], []
+        for chosen_chunks, rejected_chunks in tqdm(
+            zip(chosen_chunk_list, rejected_chunk_list), total=len(chosen_chunk_list), desc=f"collecting {label} data"
+        ):
+            for i, chosen_chunk in enumerate(chosen_chunks[:-1]):
+                if i == 0:
+                    prompt = chosen_chunk
+                else:
+                    prompt += prefix + chosen_chunk.strip()
+            chosen_output = prefix + chosen_chunks[-1]
+            rejected_output = prefix + rejected_chunks[-1]
+            prompts += [prompt, prompt]
+            outputs += [chosen_output, rejected_output]
+            scores += [score, 0]
 
-    def _extract_data(self, data, label=None, score=5):
+        return [prompts, outputs, scores]
+
+    def _extract_data(self, data, label=None, score=1):
         prefix = "\n\nAssistant: "
         chunk_list = [item.split("Assistant:") for item in data]
         prompts, outputs, scores = [], [], []
