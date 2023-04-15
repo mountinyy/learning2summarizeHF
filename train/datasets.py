@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from abc import abstractmethod
 
 import numpy as np
 from datasets import load_dataset
@@ -8,8 +9,7 @@ from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
 
-# TODO 사실 reward model의 데이터로는 SFT model의 output을 사람이 직접 평가한 것을 써야 함
-class RewardDataset(IterableDataset):
+class BaseDataset(IterableDataset):
     def __init__(self, path, limit, is_valid=False):
         super().__init__()
         self.path = path
@@ -33,17 +33,35 @@ class RewardDataset(IterableDataset):
 
         self.len = int(len(tmp_data[self.start : self.limit]) / 2)
 
+    @abstractmethod
+    def __iter__(self):
+        pass
+
+
+class RLDataset(IterableDataset):
+    def __init__(self, path, limit, is_valid=False):
+        super().__init__(path, limit, is_valid)
+
     def __iter__(self):
         with open(self.path, "r") as f:
             data = json.load(f)
-        """
-        for prompt, output, score in zip(
-            data["prompts"][self.start : self.limit],
-            data["outputs"][self.start : self.limit],
-            data["scores"][self.start : self.limit],
-        ):
-            yield (prompt + output, score)
-        """
+
+        for i in range(self.start, self.limit, 2):
+            if i == self.limit - 1:
+                continue
+            prompt = [data["prompts"][i], data["prompts"][i + 1]]
+            yield prompt
+
+
+# TODO 사실 reward model의 데이터로는 SFT model의 output을 사람이 직접 평가한 것을 써야 함
+class RewardDataset(BaseDataset):
+    def __init__(self, path, limit, is_valid=False):
+        super().__init__(path, limit, is_valid)
+
+    def __iter__(self):
+        with open(self.path, "r") as f:
+            data = json.load(f)
+
         for i in range(self.start, self.limit, 2):
             if i == self.limit - 1:
                 continue
@@ -53,33 +71,14 @@ class RewardDataset(IterableDataset):
             yield [prompt, output, scores]
 
 
-class SFTDataset(IterableDataset):
+class SFTDataset(BaseDataset):
     def __init__(self, path, limit, is_valid=False):
-        super().__init__()
-        self.path = path
-
-        # Fix limit when it is "None"
-        limit = None if limit == "None" else limit
-        with open(self.path, "r") as f:
-            tmp_data = json.load(f)["prompts"][:limit]
-        if limit is None:
-            limit = len(tmp_data)
-
-        # make boundary for train/valid set to even
-        boundary = int(limit * 0.8)
-        boundary = boundary if boundary % 2 == 0 else boundary - 1
-        if is_valid:
-            self.start = boundary
-            self.limit = limit
-        else:
-            self.start = 0
-            self.limit = boundary
-
-        self.len = len(tmp_data[self.start : self.limit])
+        super().__init__(path, limit, is_valid)
 
     def __iter__(self):
         with open(self.path, "r") as f:
             data = json.load(f)
+
         for prompt, output in zip(data["prompts"][self.start : self.limit], data["outputs"][self.start : self.limit]):
             yield prompt + output
 
