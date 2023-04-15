@@ -110,7 +110,7 @@ def train_actor(conf):
             pbar.set_postfix_str(f"loss: {loss_value}")
             if (i + 1) % conf.sft.gradient_accumulation == 0:
                 optimizer.step()
-                scheduler.step()
+
                 model.zero_grad()
 
         run_validation(conf, model, valid_dataset, valid_dataloader, loss_fn, epoch, device)
@@ -118,6 +118,9 @@ def train_actor(conf):
         mean_loss = total_loss / (train_dataset.len / conf.common.batch_size)
         if conf.wandb.use:
             wandb.log({"train/mean_loss": mean_loss})
+
+        # Scheduler
+        scheduler.step()
 
         # save checkpoint
         if epoch % conf.common.checkpoint_epoch == 0:

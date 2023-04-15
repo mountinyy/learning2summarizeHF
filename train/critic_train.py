@@ -46,14 +46,21 @@ def train_reward(conf):
 
     # Model 설정 (model, tokenizer, (config))
     model = Critic(conf, is_reward=True)
+    if conf.rm.use_saved_model:
+        if conf.rm.saved_path is None:
+            raise ValueError("cannot find saved_model path to load.")
+        model.model.load_state_dict(torch.load(conf.rm.saved_path)["state_dict"])
+        print(f"{conf.rm.saved_path}  loaded successfully!")
 
     # Train Parameter 설정
     optimizer = AdamW(model.parameters(), lr=conf.rm.learning_rate, weight_decay=1e-5)
     scheduler = CosineAnnealingWarmRestarts(
         optimizer,
-        T_0=train_dataset.len // conf.common.batch_size if train_dataset.len // conf.common.batch_size > 0 else 1,
-        T_mult=1,
-        eta_min=conf.rm.learning_rate * 0.01,
+        T_0=(train_dataset.len // conf.common.batch_size) * 5 // conf.rm.gradient_accumulation
+        if train_dataset.len // conf.common.batch_size > 0
+        else 50,
+        T_mult=2,
+        eta_min=conf.rm.learning_rate * 0.001,
     )
     # loss_fn = MSELoss()
 
@@ -123,7 +130,10 @@ def train_reward(conf):
                 wandb.log({"train/loss": loss_value})
             pbar.set_postfix_str(f"loss {loss_value}")
             if (i + 1) % conf.rm.gradient_accumulation == 0:
+                if conf.wandb.use:
+                    wandb.log({"learning_rate": optimizer.param_groups[0]["lr"]})
                 optimizer.step()
+                # Scheduler
                 scheduler.step()
                 model.zero_grad()
 

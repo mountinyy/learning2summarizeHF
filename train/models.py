@@ -19,9 +19,9 @@ class Actor(nn.Module):
         total_action_probs = model_output.logits
         return total_action_probs
 
-    def generate(self, states, states_mask):
+    def generate(self, states, states_mask, **kwargs):
         allowed_gen_length = self.conf.sft.max_seq_length - states.shape[1]
-        if allowed_gen_length < self.conf.min_gen_length:
+        if allowed_gen_length < self.conf.sft.min_gen_length:
             raise ValueError(
                 f"Prompt with length {states.shape[1]} is too long!(Maximum length : {self.conf.max_seq_length})"
             )
@@ -32,6 +32,7 @@ class Actor(nn.Module):
             temperature=self.conf.sft.temperature,
             max_new_tokens=self.conf.sft.max_gen_length,
             no_repeat_ngram_size=3,
+            **kwargs,
         )
         actions = total_actions[:, states.shape[1] :]
 
@@ -42,17 +43,26 @@ class Critic(nn.Module):
     def __init__(self, conf, is_reward):
         super().__init__()
         self.conf = conf
-
+        # Load model
         self.model = AutoModel.from_pretrained(self.conf.rm.model_name)
         model_hidden_dim = self.model.config.hidden_size
+
+        # two head lm
+        """
         self.head_lm = nn.Sequential(
             nn.Linear(model_hidden_dim, self.conf.rm.hidden_dim),
+            #nn.Dropout(p=0.2),
             nn.GELU(),
             nn.Linear(self.conf.rm.hidden_dim, 1),
         )
+        """
+
+        # one head lm
+        self.head_lm = nn.Linear(model_hidden_dim, 1)
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.conf.rm.model_name,
-            padding_side="left",
+            # padding_side="left",
             padding=True,
             truncation=True,
             model_max_length=self.conf.common.max_token_length,

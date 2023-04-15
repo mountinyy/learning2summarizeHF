@@ -139,3 +139,4 @@ data/*
 wandb/*
 saved_models/*
 nohup.out
+models/
