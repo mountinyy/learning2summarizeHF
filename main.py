@@ -1,4 +1,5 @@
 import argparse
+import os
 import random
 
 import numpy as np
@@ -8,6 +9,10 @@ from omegaconf import OmegaConf
 from train.actor_train import train_actor
 from train.critic_train import train_reward
 from train.datasets import AnthropicDataset
+from train.rl_trainer import RLTrainer
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 
 
 def get_args():
@@ -53,7 +58,8 @@ if __name__ == "__main__":
         print("=" * 50)
         print("Training RL".center(50))
         print("=" * 50)
-        pass
+        trainer = RLTrainer(conf)
+        trainer.train()
     elif args.run == "all":
         print("=" * 50)
         print("Training ALL".center(50))

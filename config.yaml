@@ -1,18 +1,18 @@
 common:
   seed: 12345
-  batch_size: 8
-  learning_rate: 3e-5
-  num_train_epochs: 15
+  batch_size: 2
+  num_train_epochs: 20
   dataset_path: ./data/
-  data_limit: None ## MUST CHANGE FOR FULL TRAIN
+  data_limit: 1000 ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024
   use_valid: True
   checkpoint_epoch: 5
 
 wandb:
-  use: True
+  use: False  ## MUST CHECK
   project_name: rlhf_dialogue
-  run_name: RM
+  run_name: RM(w.1_lm)_lr2e-6_data1000
+
 
 model:
   save_path: ./saved_models # model path would be like saved_models/MODEL_NAME/save_name
@@ -36,7 +36,23 @@ sft:
   gradient_accumulation: 4 # If don't want to use, set it 1.
 
 rm:
-  model_name: roberta-large # 355M
+  #model_name: roberta-large # 355M
+  model_name: facebook/bart-large # 400M
+  #model_name: gpt2-medium # 345M
+  saved_path : /home/sankm/rlhf_dialogue/models/sft_for_rm.pt # If you want to use saved SFT model, this should not be None
+  use_saved_model: False
   hidden_dim: 1024
-  learning_rate: 3e-5
-  gradient_accumulation: 1 # If don't want to use, set it 1.
+  learning_rate: 2e-6
+  gradient_accumulation: 2 # If don't want to use, set it 1.
+
+rl:
+  actor_model_name: gpt2-medium # 345M
+  actor_saved_path: /home/sankm/rlhf_dialogue/saved_models/sft/gpt2-medium/SFT-gpt2-medium/model_finished/model.pt
+  actor_learning_rate: 2e-6
+  critic_model_name: facebook/bart-large # 400M
+  critic_saved_path: /home/sankm/rlhf_dialogue/saved_models/rm/facebook/bart-large/RM_lr2e-6_data1000/model_finished/model.pt
+  critic_learning_rate: 2e-6
+  episodes: 100
+  max_timestep: 10
+  update_timestep: 10
+  kl_coef: 0.5

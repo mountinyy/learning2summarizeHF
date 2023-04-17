@@ -38,7 +38,7 @@ class BaseDataset(IterableDataset):
         pass
 
 
-class RLDataset(IterableDataset):
+class RLDataset(BaseDataset):
     def __init__(self, path, limit, is_valid=False):
         super().__init__(path, limit, is_valid)
 
@@ -46,11 +46,9 @@ class RLDataset(IterableDataset):
         with open(self.path, "r") as f:
             data = json.load(f)
 
-        for i in range(self.start, self.limit, 2):
-            if i == self.limit - 1:
-                continue
-            prompt = [data["prompts"][i], data["prompts"][i + 1]]
-            yield prompt
+        for i in range(self.start, self.limit):
+            # prompt = [data["prompts"][i], data["prompts"][i + 1]]
+            yield data["prompts"][i]
 
 
 # TODO 사실 reward model의 데이터로는 SFT model의 output을 사람이 직접 평가한 것을 써야 함
