@@ -1,24 +1,29 @@
 from dataclasses import dataclass
 
 import torch
-import torch.nn.functional as F
+
+from utils.computation import log_prob
 
 
 @dataclass
 class Experience:
     reward: torch.Tensor
     old_action_prob: torch.Tensor
+    action_attention_mask: torch.Tensor
     old_value: torch.Tensor
-    sequences: torch.Tensor
+    actions: torch.Tensor
     advantage: torch.Tensor
 
     @torch.no_grad()
     def to_device(self, device: torch.device):
         self.reward = self.reward.to(device)
         self.old_action_prob = self.old_action_prob.to(device)
+        self.action_attention_mask = self.action_attention_mask.to(device)
         self.old_value = self.old_value.to(device)
-        self.sequences = self.sequences.to(device)
+        self.actions = self.actions.to(device)
         self.advantage = self.advantage.to(device)
+
+        return self
 
 
 class ExperienceController:
@@ -62,12 +67,11 @@ class ExperienceController:
         # https://github.com/hpcaitech/ColossalAI/blob/1c7734bc94ac1a7215e08368adc4e7e25e3b8102/applications/Chat/coati/models/base/actor.py#L35-L38
         # 여기서 generate()가 attention mask들도 리턴하는 것 고려.
         actions, total_actions = self.rl.generate(states, states_mask)
-
         attention_mask = total_actions.not_equal(self.pad_token_id).to(dtype=torch.long, device=actions.device)
         total_action_probs = self.rl(total_actions, attention_mask)
-        total_action_probs = self.log_prob(total_action_probs, total_actions)
+        total_action_probs = log_prob(total_action_probs, total_actions)
         base_action_probs = self.sft(total_actions, attention_mask)
-        base_action_probs = self.log_prob(base_action_probs, total_actions)
+        base_action_probs = log_prob(base_action_probs, total_actions)
 
         critic_actions = self.convert_by_tokenizer(actions)
         critic_total_actions = self.convert_by_tokenizer(total_actions)
@@ -80,16 +84,10 @@ class ExperienceController:
         kl = self.compute_kl(total_action_probs, base_action_probs)
         reward = r - self.kl_coef * kl
         advantage = reward - value
-
-        return Experience(reward, total_action_probs, value, actions, advantage)
+        return Experience(reward, total_action_probs, attention_mask, value, total_actions, advantage)
 
         # Colossal AI에서는 (bz, seq, vocab) probs에서 실제 정답인 vocab들만 추려서 비교함
         # 근데 어차피 SFT와의 분포를 비교하는 거면 전체 vocab에 대해서 계산해도 되지 않을까?
-
-    def log_prob(self, sequences, labels):
-        log_probs = F.log_softmax(sequences, dim=-1)
-        log_probs = log_probs[:, :-1, :].gather(dim=-1, index=labels[:, 1:].unsqueeze(-1)).squeeze(-1)
-        return log_probs
 
     def convert_by_tokenizer(self, sequences):
         sentence = self.rl.tokenizer.batch_decode(sequences, skip_special_tokens=True)

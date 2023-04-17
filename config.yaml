@@ -54,5 +54,7 @@ rl:
   critic_learning_rate: 2e-6
   episodes: 100
   max_timestep: 10
-  update_timestep: 10
+  update_timestep: 5
   kl_coef: 0.5
+  max_epoch: 10
+  ppo_clip_ratio: 0.2

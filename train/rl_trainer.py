@@ -12,7 +12,9 @@ from tqdm import tqdm
 import wandb
 from train.datasets import RLDataset
 from train.models import Actor, Critic
+from utils.computation import log_prob
 from utils.experience import ExperienceController
+from utils.loss import PolicyLoss
 from utils.memory import Memory
 
 
@@ -71,16 +73,15 @@ class RLTrainer:
         print("rm loaded")
 
         # Train Parameter 설정
-        rl_optimizer = AdamW(self.rl.parameters(), lr=self.conf.rl.actor_learning_rate, weight_decay=1e-5)
-        critic_optimizer = AdamW(self.critic.parameters(), lr=self.conf.rl.critic_learning_rate, weight_decay=1e-5)
-        rl_optimizer
-        critic_optimizer
+        self.rl_optimizer = AdamW(self.rl.parameters(), lr=self.conf.rl.actor_learning_rate, weight_decay=1e-5)
+        self.critic_optimizer = AdamW(self.critic.parameters(), lr=self.conf.rl.critic_learning_rate, weight_decay=1e-5)
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.rl.to(device)
         self.critic.to(device)
 
         # Loss 설정
+        self.rl_loss = PolicyLoss(self.conf.rl.ppo_clip_ratio)
 
         self.experience_ctr = ExperienceController(
             self.sft,
@@ -105,14 +106,34 @@ class RLTrainer:
                 if time % self.conf.rl.update_timestep == 0:
                     self.experience_ctr.sft.to("cpu")
                     self.experience_ctr.rm.to("cpu")
-                    import pdb
-
-                    pdb.set_trace()
                     self.learn()
                     self.memory.clear()
 
     def learn(self):
-        pass
+        for _ in tqdm(range(self.conf.rl.max_epoch), desc="Learn proceduer"):
+            experiences = self.memory.sample()
+            self.rl_train(experiences)
+
+    def rl_train(self, experience):
+        self.rl.train()
+        self.critic.train()
+
+        # RL train
+        self.rl_optimizer.zero_grad()
+        old_action_probs = experience["old_action_prob"]
+        total_actions = experience["actions"]
+        actions_attention_mask = experience["action_attention_mask"]
+        advantages = experience["advantage"]
+        action_probs = self.rl(total_actions, actions_attention_mask)
+        action_probs = log_prob(action_probs, total_actions)
+
+        rl_loss = self.rl_loss(action_probs, old_action_probs, advantages)
+        # ptx train 생략
+        rl_loss.backward()
+        self.rl_optimizer.step()
+        rl_loss = rl_loss.item()
+
+        # Critic train
 
 
 """
