@@ -40,5 +40,6 @@ class Memory:
             "old_value": torch.concat([item.old_value for item in experiences], dim=0).to(device),
             "actions": torch.concat([item.actions for item in experiences], dim=0).to(device),
             "advantage": torch.concat([item.advantage for item in experiences], dim=0).to(device),
+            "critic_action": torch.concat([item.critic_actions for item in experiences], dim=0).to(device),
         }
         return batch

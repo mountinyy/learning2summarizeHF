@@ -1,21 +1,22 @@
 common:
   seed: 12345
-  batch_size: 2
+  batch_size: 4
   num_train_epochs: 20
   dataset_path: ./data/
   data_limit: 1000 ## MUST CHANGE FOR FULL TRAIN
   max_token_length: 1024
   use_valid: True
-  checkpoint_epoch: 5
+  checkpoint_epoch: 9999
 
 wandb:
-  use: False  ## MUST CHECK
+  use: True  ## MUST CHECK
   project_name: rlhf_dialogue
-  run_name: RM(w.1_lm)_lr2e-6_data1000
+  #run_name: RM(w.1_lm)_lr2e-6_data1000
+  run_name: RL_data1000_scheduler
 
 
 model:
-  save_path: ./saved_models # model path would be like saved_models/MODEL_NAME/save_name
+  save_path: ./models # model path would be like saved_models/MODEL_NAME/save_name
   checkpoint_name: None # ex) 5_checkpoint.pt or None
 
 dataset:
@@ -52,9 +53,10 @@ rl:
   critic_model_name: facebook/bart-large # 400M
   critic_saved_path: /home/sankm/rlhf_dialogue/saved_models/rm/facebook/bart-large/RM_lr2e-6_data1000/model_finished/model.pt
   critic_learning_rate: 2e-6
-  episodes: 100
+  episodes: 16
   max_timestep: 10
-  update_timestep: 5
+  update_timestep: 10
   kl_coef: 0.5
   max_epoch: 10
   ppo_clip_ratio: 0.2
+  value_clip_ratio: 0.4

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import torch
 
-from utils.computation import log_prob
+from utils.computation import convert_by_tokenizer, log_prob
 
 
 @dataclass
@@ -13,6 +13,7 @@ class Experience:
     old_value: torch.Tensor
     actions: torch.Tensor
     advantage: torch.Tensor
+    critic_actions: torch.Tensor
 
     @torch.no_grad()
     def to_device(self, device: torch.device):
@@ -22,6 +23,7 @@ class Experience:
         self.old_value = self.old_value.to(device)
         self.actions = self.actions.to(device)
         self.advantage = self.advantage.to(device)
+        self.critic_actions = self.critic_actions.to(device)
 
         return self
 
@@ -66,15 +68,15 @@ class ExperienceController:
         # https://github.com/hpcaitech/ColossalAI/blob/main/applications/Chat/coati/experience_maker/naive.py
         # https://github.com/hpcaitech/ColossalAI/blob/1c7734bc94ac1a7215e08368adc4e7e25e3b8102/applications/Chat/coati/models/base/actor.py#L35-L38
         # 여기서 generate()가 attention mask들도 리턴하는 것 고려.
-        actions, total_actions = self.rl.generate(states, states_mask)
+        actions, total_actions = self.rl.generate(states, states_mask, pad_token_id=self.eos_token_id)
         attention_mask = total_actions.not_equal(self.pad_token_id).to(dtype=torch.long, device=actions.device)
         total_action_probs = self.rl(total_actions, attention_mask)
         total_action_probs = log_prob(total_action_probs, total_actions)
         base_action_probs = self.sft(total_actions, attention_mask)
         base_action_probs = log_prob(base_action_probs, total_actions)
 
-        critic_actions = self.convert_by_tokenizer(actions)
-        critic_total_actions = self.convert_by_tokenizer(total_actions)
+        critic_actions = convert_by_tokenizer(actions, self.rl.tokenizer, self.critic.tokenizer, device)
+        critic_total_actions = convert_by_tokenizer(total_actions, self.rl.tokenizer, self.critic.tokenizer, device)
         # action_mask = self.compute_action_mask(total_actions, actions.size(-1))
         # value = self.critic(critic_actions, action_mask)
         # TODO critic으로 value 계산할 때 action만 고려해서 계산하는지 total_action을 모두 고려해서 계산하는지
@@ -84,7 +86,7 @@ class ExperienceController:
         kl = self.compute_kl(total_action_probs, base_action_probs)
         reward = r - self.kl_coef * kl
         advantage = reward - value
-        return Experience(reward, total_action_probs, attention_mask, value, total_actions, advantage)
+        return Experience(reward, total_action_probs, attention_mask, value, total_actions, advantage, critic_actions)
 
         # Colossal AI에서는 (bz, seq, vocab) probs에서 실제 정답인 vocab들만 추려서 비교함
         # 근데 어차피 SFT와의 분포를 비교하는 거면 전체 vocab에 대해서 계산해도 되지 않을까?
