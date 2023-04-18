@@ -146,7 +146,7 @@ class RLTrainer:
             self.critic_scheduler.step()
         self.save()
         print(f"checkpoints saved at {self.checkpoint_path}")
-        print(f"model saved at {self.model_path}")
+        print(f"model saved at {self.save_path}")
 
     def learn(self):
         for _ in tqdm(range(self.conf.rl.max_epoch), desc="Learn proceduer"):
@@ -192,9 +192,13 @@ class RLTrainer:
                     "Critic/learning_rate": self.critic_optimizer.param_groups[0]["lr"],
                 }
             )
+
+        # save best model
+        """
         if abs(rl_loss) < self.best_loss:
             self.best_loss = rl_loss
             self.save(text="best_")
+        """
 
     def save_checkpoint(self, episode):
         path = os.path.join(self.checkpoint_path, f"{episode}_checkpoint.pt")

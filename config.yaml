@@ -12,7 +12,7 @@ wandb:
   use: True  ## MUST CHECK
   project_name: rlhf_dialogue
   #run_name: RM(w.1_lm)_lr2e-6_data1000
-  run_name: RL_data1000_scheduler
+  run_name: RL_data1000_kl0.1
 
 
 model:
@@ -32,7 +32,7 @@ sft:
   temperature: 0.5
   max_seq_length: 1024
   min_gen_length: 30
-  max_gen_length: 120
+  max_gen_length: 512
   learning_rate: 3e-5
   gradient_accumulation: 4 # If don't want to use, set it 1.
 
@@ -53,10 +53,10 @@ rl:
   critic_model_name: facebook/bart-large # 400M
   critic_saved_path: /home/sankm/rlhf_dialogue/saved_models/rm/facebook/bart-large/RM_lr2e-6_data1000/model_finished/model.pt
   critic_learning_rate: 2e-6
-  episodes: 16
-  max_timestep: 10
-  update_timestep: 10
-  kl_coef: 0.5
-  max_epoch: 10
+  episodes: 24 # 전체 episode
+  max_timestep: 20 # 한 에피소드당 최대 10번의 experience를 만듬
+  update_timestep: 10 # experience를 10번 만들 때마다 learn함
+  kl_coef: 0.1
+  max_epoch: 20 # Max Epoch만큼 memory를 샘플링하여 learn함.
   ppo_clip_ratio: 0.2
   value_clip_ratio: 0.4
