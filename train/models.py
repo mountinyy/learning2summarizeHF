@@ -9,7 +9,8 @@ class Actor(nn.Module):
         self.conf = conf
         self.model = AutoModelForCausalLM.from_pretrained(self.conf.sft.model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.conf.sft.model_name, padding_side="left", max_model_length=conf.sft.max_seq_length
+            self.conf.sft.model_name,
+            padding_side="left",
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -22,16 +23,22 @@ class Actor(nn.Module):
 
     @torch.no_grad()
     def generate(self, states, states_mask, **kwargs):
-        allowed_gen_length = self.conf.sft.max_seq_length - states.shape[1]
+        allowed_gen_length = self.tokenizer.model_max_length - states.shape[1]
+
         if allowed_gen_length < self.conf.sft.min_gen_length:
-            raise ValueError(
-                f"Prompt with length {states.shape[1]} is too long!(Maximum length : {self.conf.max_seq_length})"
-            )
+            print(f"Prompt with length {states.shape[1]} is too long!(Maximum length : {self.conf.sft.max_seq_length})")
+            print(f"Slicing input by {self.conf.sft.min_gen_length} tokens for min_gen_length.")
+            states = states[:, : -self.conf.sft.min_gen_length]
+            states_mask = states_mask[:, : -self.conf.sft.min_gen_length]
+            allowed_gen_length = self.conf.sft.min_gen_length
+
         total_actions = self.model.generate(
             input_ids=states,
             attention_mask=states_mask,
             temperature=self.conf.sft.temperature,
-            max_new_tokens=self.conf.sft.max_gen_length,
+            max_new_tokens=allowed_gen_length
+            if self.conf.sft.max_gen_length > allowed_gen_length
+            else self.conf.sft.max_gen_length,
             no_repeat_ngram_size=3,
             **kwargs,
         )
@@ -65,7 +72,6 @@ class Critic(nn.Module):
             # padding_side="left",
             padding=True,
             truncation=True,
-            model_max_length=self.conf.common.max_token_length,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -75,8 +81,16 @@ class Critic(nn.Module):
 
     # TODO Reward Model을 어떻게 구성해야 모델이 dialogue에 대한 응답의 적절성에 집중할 수 있을까?
     def forward(self, input_ids, attention_mask=None):
-        output = self.model(input_ids, attention_mask=attention_mask)
-        reward = self.head_lm(output.last_hidden_state)
-        reward = reward.view(reward.size(0), -1)[:, -1]
+        import pdb
+
+        if input_ids.size(-1) > self.tokenizer.model_max_length:
+            pdb.set_trace()
+        try:
+            output = self.model(input_ids, attention_mask=attention_mask)
+            reward = self.head_lm(output.last_hidden_state)
+            reward = reward.view(reward.size(0), -1)[:, -1]
+        except Exception as e:
+            pdb.set_trace()
+            print(e)
 
         return reward

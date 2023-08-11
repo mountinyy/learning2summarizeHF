@@ -122,23 +122,24 @@ class RLTrainer:
             self.conf.rl.kl_coef,
         )
         time = 0
-        self.memory = Memory(self.conf.common.batch_size, -1, device)
+        self.memory = Memory(self.conf.rl.memory_batch_size, -1, device)
         for episode in range(1, self.conf.rl.episodes + 1):
-            for timestep in tqdm(
-                range(1, self.conf.rl.max_timestep + 1), desc=f"Episode {episode}/{self.conf.rl.episodes}"
+            for data in tqdm(
+                train_dataloader,
+                total=int(train_dataset.len / self.conf.common.batch_size),
+                desc=f"Episode {episode}/{self.conf.rl.episodes}",
             ):
                 time += 1
-                data = next(iter(train_dataloader))
                 self.experience_ctr.sft.to(device)
                 self.experience_ctr.rm.to(device)
                 experience = self.experience_ctr.create_experience(data, device)
                 self.memory.append(experience)
-
                 if time % self.conf.rl.update_timestep == 0:
                     self.experience_ctr.sft.to("cpu")
                     self.experience_ctr.rm.to("cpu")
                     self.learn()
                     self.memory.clear()
+
             if episode % self.conf.common.checkpoint_epoch == 0:
                 self.save_checkpoint(episode)
 

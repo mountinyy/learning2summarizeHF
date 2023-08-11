@@ -31,7 +31,7 @@ class BaseDataset(IterableDataset):
             self.start = 0
             self.limit = boundary
 
-        self.len = int(len(tmp_data[self.start : self.limit]) / 2)
+        self.len = len(tmp_data[self.start : self.limit])
 
     @abstractmethod
     def __iter__(self):
@@ -55,6 +55,7 @@ class RLDataset(BaseDataset):
 class RewardDataset(BaseDataset):
     def __init__(self, path, limit, is_valid=False):
         super().__init__(path, limit, is_valid)
+        self.len = int(self.len / 2)
 
     def __iter__(self):
         with open(self.path, "r") as f:

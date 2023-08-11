@@ -110,7 +110,6 @@ def train_actor(conf):
             pbar.set_postfix_str(f"loss: {loss_value}")
             if (i + 1) % conf.sft.gradient_accumulation == 0:
                 optimizer.step()
-
                 model.zero_grad()
 
         run_validation(conf, model, valid_dataset, valid_dataloader, loss_fn, epoch, device)

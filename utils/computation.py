@@ -9,5 +9,5 @@ def log_prob(sequences, labels):
 
 def convert_by_tokenizer(sequences, source_tokenizer, target_tokenizer, device):
     sentence = source_tokenizer.batch_decode(sequences, skip_special_tokens=True)
-    tokenized = target_tokenizer(sentence, padding=True, return_tensors="pt")["input_ids"]
+    tokenized = target_tokenizer(sentence, padding=True, truncation=True, return_tensors="pt")["input_ids"]
     return tokenized.to(sequences.device)

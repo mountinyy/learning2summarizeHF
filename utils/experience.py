@@ -60,7 +60,7 @@ class ExperienceController:
         self.rl.eval()
         self.critic.eval()
 
-        tokenized_data = self.rl.tokenizer(data, padding=True, return_tensors="pt").to(device)
+        tokenized_data = self.rl.tokenizer(data, padding=True, truncation=True, return_tensors="pt").to(device)
         states = tokenized_data["input_ids"]
         states_mask = tokenized_data["attention_mask"]
 
